@@ -1,0 +1,159 @@
+---
+title: "Prediction Assignment Writeup"
+author: "Reneiro Muñoz"
+date: "10/7/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import libraries 
+
+```{r message = FALSE, warning = FALSE}
+library(caret)
+library(ggplot2)
+library(lattice)
+library(e1071)
+
+```
+
+## Reading the data
+
+```{r message = FALSE, warning = FALSE}
+training<-read.csv("/home/reneiro/Descargas/pml-training.csv",header = TRUE,stringsAsFactors = TRUE,na.strings = "NA")
+testing<-read.csv("/home/reneiro/Descargas/pml-testing.csv",header=TRUE,stringsAsFactors = TRUE,na.strings = "NA")
+```
+
+
+## Data cleaning
+
+We exclude variables with NA in the data sets
+
+```{r message = FALSE, warning = FALSE}
+library(dplyr)
+training <- training[, colSums(is.na(training)) == 0]
+testing<-testing[,colSums(is.na(testing)) == 0]
+```
+
+We remove the variables that are not involved in the movement record
+
+```{r message = FALSE, warning = FALSE}
+trainingset<-training[,-c(1:7)]
+testing<-testing[,-c(1:7)]
+```
+
+check the dimention and type of each variable for both sets
+ 
+```{r message = FALSE, warning = FALSE}
+dim(trainingset)
+sapply(trainingset,class)
+dim(testing)
+sapply(testing,class)
+```
+
+We select numberic variables for model building.
+
+```{r message = FALSE, warning = FALSE}
+class<-trainingset$classe
+trainingset<-trainingset[ ,sapply(trainingset,class)=='numeric']
+testing<-testing[,sapply(testing,class)=='numeric']
+
+trainingset<-trainingset[,colnames(testing)]
+trainingset<-mutate(trainingset,classe=class)
+
+dim(trainingset)
+dim(testing)
+```
+
+
+## Spliting data for training and testing within training set 
+
+We create data partition and assign training and test set for model buidling
+
+```{r message = FALSE, warning = FALSE}
+set.seed(13737)
+
+intrain<-createDataPartition(trainingset$classe,p=0.7,list = FALSE)
+
+trainset<-trainingset[intrain,]
+testset<-trainingset[-intrain,]
+
+```
+
+Next, we will try three different approaches and choose the best model to run the prediction on pml-testing data
+
+## We set up parallel processing 
+
+```{r warning=FALSE, message = FALSE}
+library(snow)
+library(parallel)
+c1<-makeCluster(detectCores()-1)
+```
+We set up the parallel processing to speed up model development
+
+
+## prediction algorithm random forest 
+
+```{r message = FALSE, warning = FALSE}
+library(randomForest)
+set.seed(123456)
+fitControl<-trainControl(method = "cv",number = 5,allowParallel = TRUE)
+modelrf<-train(classe ~., data=trainset,method="rf",trControl=fitControl)
+predictrf<-predict(modelrf,testset)
+confmatrixrf<-confusionMatrix(testset$classe,predictrf)
+confmatrixrf
+
+confmatrixrf$overall[1]
+```
+The accuracy of this model reached >99% 
+
+## prediction algorithm gbm
+
+```{r  message = FALSE, warning = FALSE}
+library(gbm)
+set.seed(123456)
+fitControl<-trainControl(method = "cv",number = 5,allowParallel = TRUE)
+modelgbm<-train(classe ~ .,data=trainset,method="gbm",trControl=fitControl)
+predictgbm<-predict(modelgbm,testset)
+confumatrixgbm<-confusionMatrix(testset$classe,predictgbm)
+
+confumatrixgbm$overall[1]
+```
+The accuracy is around 95%
+
+## prediction algorithms Decision Tree
+
+```{r  message = FALSE, warning = FALSE }
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+modeldt<-train(classe ~ .,data=trainset,method="rpart")
+fancyRpartPlot(modeldt$finalModel)
+predictdt<-predict(modeldt,testset)
+confumatrixdf<-confusionMatrix(predictdt,testset$classe)
+confumatrixdf$overall[1]
+```
+The accuracy is around 43%.
+
+## Prediction on pml-testing data
+
+After carrying out the tests, the best model is obtained using the random forest algorithm.
+
+Next, We estimate the out of sample error and prediction on the 20 test cases.
+
+```{r  message = FALSE, warning = FALSE }
+error<-as.numeric(1-confmatrixrf$overall[1])
+error
+
+prediction<-predict(modelrf,testing)
+prediction
+
+stopCluster(c1)
+```
+
+
+## Data source:
+http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har
