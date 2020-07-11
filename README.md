@@ -1,6 +1,6 @@
 # Prediction-Assignment-Writeup
 
-## view HTML page online.
+## view HTML page online: https://reneiro7.github.io/Prediction-Assignment-Writeup/
 
 
 
